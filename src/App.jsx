@@ -1,62 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Couple from './Couple.jsx'
 import Petals from './Petals.jsx'
+import { IslamicBackground, Star } from './Islamic.jsx'
 
 // ---- Edit your details here ----
 const EVENT = {
   groom: 'Ahmed',
   bride: 'Nada',
   dayName: 'Friday',
+  dateLabel: '18 December 2026',
   timeLabel: '3:00 PM — 6:00 PM',
   venue: 'Villa Rihana',
   // Egypt is UTC+2 in December
   start: new Date('2026-12-18T15:00:00+02:00'),
-  end: new Date('2026-12-18T18:00:00+02:00'),
   mapsUrl:
     'https://www.google.com/maps/place/Villa+Rihana/data=!4m2!3m1!1s0x0:0x383f54fc06dc5a10',
   mapsEmbed: 'https://maps.google.com/maps?q=Villa%20Rihana&z=15&output=embed',
 }
 
+// Surah Ar-Rum 30:21
+const AYA =
+  'وَمِنْ آيَاتِهِ أَنْ خَلَقَ لَكُم مِّنْ أَنفُسِكُمْ أَزْوَاجًا لِّتَسْكُنُوا إِلَيْهَا وَجَعَلَ بَيْنَكُم مَّوَدَّةً وَرَحْمَةً'
+
+const AUTO_OPEN_SECONDS = 3
 const pad = (n) => String(n).padStart(2, '0')
-const toICSDate = (d) =>
-  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(
-    d.getUTCHours()
-  )}${pad(d.getUTCMinutes())}00Z`
-
-const title = `${EVENT.groom} & ${EVENT.bride}'s Wedding`
-const googleCalUrl =
-  'https://calendar.google.com/calendar/render?action=TEMPLATE' +
-  `&text=${encodeURIComponent(title)}` +
-  `&dates=${toICSDate(EVENT.start)}/${toICSDate(EVENT.end)}` +
-  `&location=${encodeURIComponent(EVENT.venue)}` +
-  `&details=${encodeURIComponent('We can’t wait to celebrate with you! ' + EVENT.mapsUrl)}`
-
-function downloadICS() {
-  const ics = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Ahmed & Nada//Wedding//EN',
-    'BEGIN:VEVENT',
-    'UID:ahmed-nada-20261218@wedding',
-    `DTSTAMP:${toICSDate(new Date())}`,
-    `DTSTART:${toICSDate(EVENT.start)}`,
-    `DTEND:${toICSDate(EVENT.end)}`,
-    `SUMMARY:${title}`,
-    `LOCATION:${EVENT.venue}`,
-    `DESCRIPTION:${EVENT.mapsUrl}`,
-    'END:VEVENT',
-    'END:VCALENDAR',
-  ].join('\r\n')
-  const blob = new Blob([ics], { type: 'text/calendar' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = 'ahmed-nada-wedding.ics'
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
 
 // Fade/slide elements in as they scroll into view
-function Reveal({ children, delay = 0, className = '', as: Tag = 'div' }) {
+function Reveal({ children, delay = 0, className = '' }) {
   const ref = useRef(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
@@ -73,26 +43,25 @@ function Reveal({ children, delay = 0, className = '', as: Tag = 'div' }) {
     return () => io.disconnect()
   }, [])
   return (
-    <Tag ref={ref} className={`reveal ${shown ? 'in' : ''} ${className}`} style={{ transitionDelay: `${delay}ms` }}>
+    <div ref={ref} className={`reveal ${shown ? 'in' : ''} ${className}`} style={{ transitionDelay: `${delay}ms` }}>
       {children}
-    </Tag>
+    </div>
   )
 }
 
-// Letter-by-letter animated text
-function SplitText({ text, delay = 0, step = 0.08, className = '' }) {
-  return (
-    <span className={`split ${className}`} aria-label={text}>
-      {[...text].map((ch, i) => (
-        <span key={i} className="char" aria-hidden="true" style={{ animationDelay: `${delay + i * step}s` }}>
-          {ch === ' ' ? ' ' : ch}
-        </span>
-      ))}
+// Word-by-word reveal (keeps Arabic letters connected)
+function Words({ text, delay = 0, step = 0.12 }) {
+  const words = text.split(' ')
+  return words.map((w, i) => (
+    <span key={i} className="word" style={{ animationDelay: `${delay + i * step}s` }}>
+      {i === 0 && <span className="bracket">﴿</span>}
+      {w}
+      {i === words.length - 1 ? <span className="bracket">﴾</span> : ' '}
     </span>
-  )
+  ))
 }
 
-// Card that tilts in 3D following the mouse / finger
+// Card that tilts in 3D following the finger / mouse
 function TiltCard({ children, className = '' }) {
   const ref = useRef(null)
   const move = (e) => {
@@ -144,19 +113,36 @@ function Countdown() {
 
 function Envelope({ onOpen }) {
   const [opening, setOpening] = useState(false)
-  const open = () => {
-    if (opening) return
+  const [left, setLeft] = useState(AUTO_OPEN_SECONDS)
+  const started = useRef(false)
+
+  const open = useCallback(() => {
+    if (started.current) return
+    started.current = true
     setOpening(true)
     setTimeout(onOpen, 1700)
-  }
+  }, [onOpen])
+
+  // Opens by itself after 3 seconds if nobody taps
+  useEffect(() => {
+    if (opening) return
+    if (left === 0) {
+      open()
+      return
+    }
+    const t = setTimeout(() => setLeft((l) => l - 1), 1000)
+    return () => clearTimeout(t)
+  }, [left, opening, open])
+
   return (
     <div className={`intro ${opening ? 'leaving' : ''}`}>
-      <p className="intro-top">You are invited</p>
-      <button className={`envelope ${opening ? 'open' : ''}`} onClick={open} aria-label="Open invitation">
+      <Star className="intro-star" />
+      <p className="intro-top">Wedding Invitation</p>
+      <button className={`envelope ${opening ? 'open' : ''}`} onClick={open} aria-label="Open the invitation">
         <span className="env-back" />
         <span className="env-letter">
-          <span className="letter-names">A &amp; N</span>
-          <span className="letter-date">18 · 12 · 2026</span>
+          <span className="letter-names">{EVENT.groom} &amp; {EVENT.bride}</span>
+          <span className="letter-date">{EVENT.dateLabel}</span>
         </span>
         <span className="env-front" />
         <span className="env-flap" />
@@ -164,60 +150,85 @@ function Envelope({ onOpen }) {
         {opening && (
           <span className="burst" aria-hidden="true">
             {Array.from({ length: 18 }, (_, i) => (
-              <i key={i} style={{ '--a': `${i * 20}deg`, '--d': `${60 + (i % 3) * 30}px` }}>♥</i>
+              <i key={i} style={{ '--a': `${i * 20}deg`, '--d': `${60 + (i % 3) * 30}px` }}>{i % 2 ? '✦' : '♥'}</i>
             ))}
           </span>
         )}
       </button>
       <p className="tap">Tap the seal to open</p>
+      <div className={`auto ${opening ? 'done' : ''}`}>
+        <span>or it opens automatically in</span>
+        <span className="auto-num">{left}</span>
+      </div>
+      <span className="auto-bar"><span /></span>
     </div>
   )
 }
 
 export default function App() {
   const [opened, setOpened] = useState(false)
+  const [scene, setScene] = useState(false)
   const heroRef = useRef(null)
 
-  // Parallax for the hero scene
   useEffect(() => {
     if (!opened) return
+    const t = setTimeout(() => setScene(true), 600)
     const onScroll = () => heroRef.current?.style.setProperty('--sy', window.scrollY)
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      clearTimeout(t)
+      window.removeEventListener('scroll', onScroll)
+    }
   }, [opened])
 
   return (
     <>
-      <Petals />
+      <IslamicBackground />
+            <Petals />
       {!opened && <Envelope onOpen={() => setOpened(true)} />}
 
       {opened && (
         <main className="page">
           <section className="hero" ref={heroRef}>
-            <div className="hero-scene">
-              <Couple />
+            <div lang="ar" dir="rtl" className="quran">
+              <p className="bismillah fade-up" style={{ animationDelay: '0.1s' }}>
+                بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ
+              </p>
+              <div className="aya-frame fade-up" style={{ animationDelay: '0.3s' }}>
+                <Star className="aya-star" />
+                <p className="aya">
+                  <Words text={AYA} delay={0.6} step={0.11} />
+                </p>
+                <p className="aya-ref" dir="ltr" lang="en">Surah Ar-Rum · 30:21</p>
+              </div>
             </div>
-            <p className="kicker fade-up" style={{ animationDelay: '0.6s' }}>
-              Together with their families
+
+            <div className="hero-scene">
+              {scene && <Couple />}
+            </div>
+
+            <p className="kicker fade-up" style={{ animationDelay: '2.2s' }}>
+              With joy and love, we invite you to the wedding of
             </p>
             <h1 className="names">
-              <SplitText text={EVENT.groom} delay={1.2} />
-              <span className="amp fade-up" style={{ animationDelay: '1.8s' }}>&amp;</span>
-              <SplitText text={EVENT.bride} delay={2.1} />
+              <span className="name write" style={{ animationDelay: '2.6s' }}>{EVENT.groom}</span>
+              <span className="and fade-up" style={{ animationDelay: '3.2s' }}>&amp;</span>
+              <span className="name write" style={{ animationDelay: '3.5s' }}>{EVENT.bride}</span>
             </h1>
-            <div className="divider draw" />
-            <p className="invite fade-up" style={{ animationDelay: '2.8s' }}>
-              request the honour of your presence
-              <br />
-              as they celebrate their wedding
+            <div className="divider draw"><Star className="divider-star" /></div>
+            <p className="invite fade-up" style={{ animationDelay: '4.2s' }}>
+              Your presence will complete our joy
             </p>
-            <a href="#date" className="scroll-hint fade-up" style={{ animationDelay: '3.4s' }} aria-label="Scroll down">
+            <a href="#date" className="scroll-hint fade-up" style={{ animationDelay: '4.6s' }} aria-label="Scroll down">
               <span />
             </a>
           </section>
 
           <section className="section" id="date">
-            <Reveal><p className="section-kicker">Save the date</p></Reveal>
+            <Reveal>
+              <Star className="sec-star" />
+              <p className="section-kicker">Save the Date</p>
+            </Reveal>
             <Reveal delay={150}>
               <TiltCard className="date-card">
                 <span className="shine" />
@@ -232,17 +243,12 @@ export default function App() {
             </Reveal>
             <Reveal delay={300}><p className="count-title">Counting down to our day</p></Reveal>
             <Reveal delay={400}><Countdown /></Reveal>
-            <Reveal delay={550}>
-              <div className="buttons">
-                <a className="btn" href={googleCalUrl} target="_blank" rel="noreferrer">Add to Google Calendar</a>
-                <button className="btn ghost" onClick={downloadICS}>Apple / Outlook</button>
-              </div>
-            </Reveal>
           </section>
 
           <section className="section">
             <Reveal>
-              <p className="section-kicker">The venue</p>
+              <Star className="sec-star" />
+              <p className="section-kicker">The Venue</p>
               <h2 className="venue">{EVENT.venue}</h2>
             </Reveal>
             <Reveal delay={200}>
@@ -251,7 +257,7 @@ export default function App() {
               </div>
             </Reveal>
             <Reveal delay={350}>
-              <a className="btn" href={EVENT.mapsUrl} target="_blank" rel="noreferrer">Get directions</a>
+              <a className="btn" href={EVENT.mapsUrl} target="_blank" rel="noreferrer">Get Directions</a>
             </Reveal>
           </section>
 
@@ -259,7 +265,7 @@ export default function App() {
             <Reveal>
               <div className="beat">♥</div>
               <p className="closing">We can’t wait to celebrate with you</p>
-              <p className="sign">{EVENT.groom} &amp; {EVENT.bride} · 18.12.2026</p>
+              <p className="sign">{EVENT.groom} &amp; {EVENT.bride} · {EVENT.dateLabel}</p>
             </Reveal>
           </footer>
         </main>
